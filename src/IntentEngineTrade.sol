@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { IntentEngineRegistry } from "./IntentEngineRegistry.sol";
-import { IUniswap } from "./IUniswap.sol";
+import {UniswapRegistry} from "./UniswapRegistry.sol";
+import {IUniswap} from "./IUniswap.sol";
+import {IERC20} from "./IERC20.sol";
 
-contract IntentEngine is IntentEngineRegistry{
+contract IntentEngine is UniswapRegistry {
     error InvalidSyntax();
     error InvalidCharacter();
 
@@ -16,10 +17,10 @@ contract IntentEngine is IntentEngineRegistry{
     function commandToTrade(
         string calldata intent
     )
-        external pure
+        external
         returns (string memory pair, uint256 amount, string memory protocol)
     {
-        address to = msg.sender;
+        address client = msg.sender;
         bytes memory normalized = _lowercase(bytes(intent));
         StringPart[] memory parts = _split(normalized, " ");
 
@@ -29,19 +30,29 @@ contract IntentEngine is IntentEngineRegistry{
         bytes memory amountBytes = _extractAmount(normalized);
         bytes memory protocolBytes = _getPart(normalized, parts[2]);
 
-        pair = string(pairBytes);   
+        pair = string(pairBytes);
         amount = _toUint(amountBytes, 18, true);
         protocol = string(protocolBytes);
 
-        // will fetch pair from registry
-        //input pair if protocol = uniswap then swap on uniswap
+        if (
+            keccak256(abi.encodePacked(protocol)) ==
+            keccak256(abi.encodePacked("uniswap"))
+        ) {
+            address[] memory pathArray = new address[](2);
+            pathArray = getPathForPair(pair);
+            IERC20(pathArray[0]).transferFrom(client, address(this), amount);
 
-        //-----------path define krna hoga in array bc-------------------
+            IERC20(pathArray[0]).approve(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, amount);
 
-        if(protocol=="uniswap"){
-            //call uniswap function
-            IUniswap(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D).swapExactTokensForTokens(amount, 0, , to, deadline);
-
+            // Issue : UniswapV2Router:
+            IUniswap(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D)
+                .swapExactTokensForTokens(
+                    amount,
+                    0,
+                    pathArray,
+                    client,
+                    block.timestamp + 3000
+                );
         }
 
         return (pair, amount, protocol);
@@ -53,7 +64,6 @@ contract IntentEngine is IntentEngineRegistry{
         StringPart[] memory parts = _split(normalizedIntent, " ");
         return _getPart(normalizedIntent, parts[1]); // Extract the "amount" part
     }
-
 
     function _split(
         bytes memory base,
@@ -142,4 +152,29 @@ contract IntentEngine is IntentEngineRegistry{
     receive() external payable {}
 
     fallback() external payable {}
+
+    // Getter Functions
+
+    function returnIntentValues(
+        string memory intent
+    )
+        public
+        pure
+        returns (string memory pair, uint256 amount, string memory protocol)
+    {
+        bytes memory normalized = _lowercase(bytes(intent));
+        StringPart[] memory parts = _split(normalized, " ");
+
+        if (parts.length != 3) revert InvalidSyntax(); // Expect "pair amount protocol"
+
+        bytes memory pairBytes = _getPart(normalized, parts[0]);
+        bytes memory amountBytes = _extractAmount(normalized);
+        bytes memory protocolBytes = _getPart(normalized, parts[2]);
+
+        pair = string(pairBytes);
+        amount = _toUint(amountBytes, 18, true);
+        protocol = string(protocolBytes);
+
+        return (pair, amount, protocol);
+    }
 }
