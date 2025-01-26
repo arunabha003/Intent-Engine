@@ -43,67 +43,68 @@ contract TradeTest is Test {
         console.log("User balance: ", userBalance); // 10 WETH is coming
 
         // Fetching intent values
-
         uint256 amount;
-        string memory pair;
+        string memory token1;
+        string memory token2;
         string memory protocol;
-        (pair, amount, protocol) = intentEngine.returnIntentValues(
-            "weth/dai 1 uniswap"
+        (token1, token2, amount, protocol) = intentEngine.returnIntentValues(
+            "weth dai 1.0203232 uniswap"
         );
-        console.log("Pair: ", pair);
-        console.log("Amount: ", amount / 1e18);
-        console.log("Protocol: ", protocol);
+        console.log("token1: ", token1);
+        console.log("token2: ", token2);
+        console.log("amount: ", amount);
+        console.log("protocol: ", protocol);
 
-        // Fetching path for pair
-        address[] memory pathArray = new address[](2);
-        pathArray = intentEngine.getPathForPair(pair);
-        console.log("Path Array 1st : ", pathArray[0]); // WETH
-        console.log("Path Array 2nd : ", pathArray[1]); //  DAI
+        vm.startPrank(user); // Execute the transaction as the user
 
-        vm.prank(user); // Execute the transaction as the user
-
-        // Swapping on Uniswap
         require(
-            IERC20(pathArray[0]).approve(address(uniswapRouter), amount),
+            IERC20(weth_address).approve(address(intentEngine), amount),
             "approve failed."
         );
         console.log("Approved Uniswap to spend ", amount);
 
-        // intentEngine.commandToTrade("weth/dai 1 uniswap");
-
         vm.stopPrank();
 
-        uint256 allowance = IERC20(pathArray[0]).allowance(
+        uint256 allowance = IERC20(weth_address).allowance(
             user,
-            address(uniswapRouter)
+            address(intentEngine)
         );
-        console.log("Allowance given to Uniswap:", allowance);
+        console.log("Allowance given to Intent Engine:", allowance);
         require(amount == allowance, "Allowance not set");
+
+        // checking amounts out
+        address[] memory pathArray = new address[](2);
+        pathArray[0] = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+        pathArray[1] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
+
         uint256[] memory amountsOut = IUniswap(
             0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
         ).getAmountsOut(amount, pathArray);
+        //weth to dai!
 
+        address addToken1 = intentEngine.getAddressFromString("weth");
         console.log(
             "Expected DAI output: ",
-            amountsOut[1] / 1e18,
-            "address of coin output",
-            pathArray[1]
+            amountsOut[1] / 1e18
+            // "address of coin output",
+            // pathArray[1]
         );
-
-        // ---------------------- DAI TO WETH nhi hora but Weth to DAI hora ----------------------
-
         vm.prank(user);
-        IERC20(pathArray[0]).approve(address(intentEngine), amount);
-        vm.prank(user);
-
-        intentEngine.commandToTrade("weth/dai 1 uniswap");
+        intentEngine.commandToTrade("weth dai 1 uniswap");
         console.log("Swapped on Uniswap");
 
-        uint256 userBalanceRemainsAfterTradeFirst = IERC20(pathArray[0])
+        uint256 userBalanceRemainsAfterTradeFirst = IERC20(weth_address)
             .balanceOf(address(user));
         console.log(
             "User balance remains after trade: ",
             userBalanceRemainsAfterTradeFirst / 1e18
+        );
+
+        uint256 userBalanceOfSecondToken = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F)
+            .balanceOf(address(user));
+        console.log(
+            "User balance of second token after trade: ",
+            userBalanceOfSecondToken / 1e18
         );
     }
 }

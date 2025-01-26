@@ -18,31 +18,39 @@ contract IntentEngine is UniswapRegistry {
         string calldata intent
     )
         external
-        returns (string memory pair, uint256 amount, string memory protocol)
+        returns (
+            uint256 amount,
+            string memory protocol
+        )
     {
         address client = msg.sender;
         bytes memory normalized = _lowercase(bytes(intent));
         StringPart[] memory parts = _split(normalized, " ");
 
-        if (parts.length != 3) revert InvalidSyntax(); // Expect "pair amount protocol"
+        if (parts.length != 4) revert InvalidSyntax();
 
-        bytes memory pairBytes = _getPart(normalized, parts[0]);
-        bytes memory amountBytes = _extractAmount(normalized);
-        bytes memory protocolBytes = _getPart(normalized, parts[2]);
+        string memory token1 = string(_getPart(normalized, parts[0])); //eth
+        string memory token2 = string(_getPart(normalized, parts[1])); //dai
+        bytes memory amountBytes = _extractAmount(normalized); //amount
+        string memory protocol = string(_getPart(normalized, parts[3])); //uniswap
 
-        pair = string(pairBytes);
         amount = _toUint(amountBytes, 18, true);
-        protocol = string(protocolBytes);
 
         if (
             keccak256(abi.encodePacked(protocol)) ==
             keccak256(abi.encodePacked("uniswap"))
         ) {
             address[] memory pathArray = new address[](2);
-            pathArray = getPathForPair(pair);
+            address addToken1 = getAddressFromString(token1);
+            address addToken2 = getAddressFromString(token2);
+            pathArray[0] = addToken1;
+            pathArray[1] = addToken2;
             IERC20(pathArray[0]).transferFrom(client, address(this), amount);
 
-            IERC20(pathArray[0]).approve(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, amount);
+            IERC20(addToken1).approve(
+                0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D,
+                amount
+            );
 
             // Issue : UniswapV2Router:
             IUniswap(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D)
@@ -55,14 +63,14 @@ contract IntentEngine is UniswapRegistry {
                 );
         }
 
-        return (pair, amount, protocol);
+        return (amount, protocol);
     }
 
     function _extractAmount(
         bytes memory normalizedIntent
     ) internal pure returns (bytes memory amount) {
         StringPart[] memory parts = _split(normalizedIntent, " ");
-        return _getPart(normalizedIntent, parts[1]); // Extract the "amount" part
+        return _getPart(normalizedIntent, parts[2]); // Extract the "amount" part
     }
 
     function _split(
@@ -160,21 +168,19 @@ contract IntentEngine is UniswapRegistry {
     )
         public
         pure
-        returns (string memory pair, uint256 amount, string memory protocol)
+        returns (string memory token1, string memory token2, uint256 amount, string memory protocol)
     {
         bytes memory normalized = _lowercase(bytes(intent));
         StringPart[] memory parts = _split(normalized, " ");
 
-        if (parts.length != 3) revert InvalidSyntax(); // Expect "pair amount protocol"
+        if (parts.length != 4) revert InvalidSyntax();
 
-        bytes memory pairBytes = _getPart(normalized, parts[0]);
-        bytes memory amountBytes = _extractAmount(normalized);
-        bytes memory protocolBytes = _getPart(normalized, parts[2]);
-
-        pair = string(pairBytes);
+        string memory token1 = string(_getPart(normalized, parts[0])); //eth
+        string memory token2 = string(_getPart(normalized, parts[1])); //dai
+        bytes memory amountBytes = _extractAmount(normalized); //amount
+        string memory protocol = string(_getPart(normalized, parts[3])); //uniswap
         amount = _toUint(amountBytes, 18, true);
-        protocol = string(protocolBytes);
 
-        return (pair, amount, protocol);
+        return (token1, token2, amount, protocol);
     }
 }
